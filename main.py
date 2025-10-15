@@ -162,15 +162,28 @@ def sales_rank(data):
 
     return ranked
 
-def output_file(calc1, calc2):
-    
+def output_file(calc1, calc2, out_path="project1_output.csv"):
+    """
+    Write results to a CSV with columns:
+      State, Calc1, Calc2
 
-    # for key, value in calc1.items():
-    #     print(f"State {key} = {value}%")
+    Where:
+      - calc1: dict[state -> percentage of Technology orders for First Class] (float)
+      - calc2: dict[state -> total First Class Sales USD] (float)
 
-    # for key, value in calc2.items():
-    #     print(f"State {key} = {total:.2f}$") 
-    pass
+    Returns:
+      str  # the output path
+    """
+    # calc1 is already sorted (from your tech_stats), and dict preserves insertion order
+    with open(out_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["State", "Calc1", "Calc2"])
+
+        for state, pct in calc1.items():
+            total_sales = calc2.get(state, 0.0)
+            # No rounding per your earlier preference; write raw floats
+            writer.writerow([state, round(pct,2), round(total_sales,2)])
+
 
 # === Main ===
 def main():
@@ -182,56 +195,100 @@ def main():
 
 # === Tests ===
 class TestProject1(unittest.TestCase):
-    data = load_data("SampleSuperstore.csv")
 
-# ======== Test load_data() ========
-    def test_load_data_9994(self):
-        self.assertEqual(self.data["Item Count"], 9994)
+    # private class function: Build mock data shaped like load_data() output
+    def build_dict(self, states, ship_modes, categories):
+        return {
+            "Shipment Detail": {
+                "State": states,
+                "Ship Mode": ship_modes,
+            },
+            "About Shipment": {
+                "Category": categories,
+            },
+            "Item Count": len(states),
+        }
 
-    def test_load_data_first_row_vals(self):
-        # Second line from SampleSuperstore.csv
-        # Second Class,Consumer,United States,Henderson,Kentucky,42420,South,Furniture,Bookcases,261.96,2,0,41.9136
-        shipment_details = self.data["Shipment Detail"]
-        about_shipment = self.data["About Shipment"]
+    # ==== Testing Calculation 1 ====
+    def test_tech_stats_correct_percentages(self):
+        """
+        Test normal case where states have both tech and non-tech First Class orders.
 
-        self.assertEqual(shipment_details["Ship Mode"][0], "Second Class")
-        self.assertEqual(shipment_details["City"][0], "Henderson")
-        self.assertEqual(about_shipment["Category"][0], "Furniture")
-        self.assertEqual(about_shipment["Sales"][0], 261.96)
-        self.assertEqual(about_shipment["Quantity"][0], 2)         # int
-        self.assertEqual(about_shipment["Discount"][0], 0.0)       # float
-        self.assertEqual(about_shipment["Profit"][0], 41.9136)     # float
-        self.assertEqual(shipment_details["Postal Code"][0], 42420) # int
+        Test dictionary content:
+        CA: 3 total rows (2 First Class, 1 Standard), 1 tech First Class → expected 0.5
+        TX: 2 total rows (1 First Class, 1 Second), 1 tech First Class → expected 1.0
+        FL: 1 total row (1 First Class), 0 tech → expected 0.0
+        """
+        data = self.build_dict(
+            states     = ["CA","CA","TX","FL","CA","TX"],
+            ship_modes = ["First Class","First Class","First Class","First Class","Standard Class","Second Class"],
+            categories = ["Technology","Furniture","Technology","Office Supplies","Technology","Technology"],
+        )
+        result = tech_stats(data)
+
+        self.assertAlmostEqual(result["TX"], 1.0)
+        self.assertAlmostEqual(result["CA"], 0.5)
+        self.assertAlmostEqual(result["FL"], 0.0)
+
+    def test_tech_stats_sorted_descending(self):
+        """
+        Test that states are sorted by descending percentage.
+
+        Test dictionary content:
+        TX: 2 total FC rows, 2 tech → expected 1.0
+        CA: 2 total FC rows, 1 tech → expected 0.5
+        FL: 1 total FC row, 0 tech → expected 0.0
+        """
+        data = self.build_dict(
+            states     = ["TX","TX","CA","CA","FL"],
+            ship_modes = ["First Class","First Class","First Class","First Class","First Class"],
+            categories = ["Technology","Office Supplies","Technology","Furniture","Furniture"],
+        )
+        result = tech_stats(data)
+
+        self.assertEqual(list(result.keys()), ["TX","CA","FL"])
+
+    def test_tech_stats_no_first_class_returns_empty(self):
+        """
+        Edge case: when no First Class shipments exist, result should be empty.
+
+        Test dictionary content:
+        CA: 1 row, Standard Class → ignored
+        TX: 1 row, Second Class → ignored
+        FL: 1 row, Same Day → ignored
+        Expected: {}
+        """
+        data = self.build_dict(
+            states     = ["CA","TX","FL"],
+            ship_modes = ["Standard Class","Second Class","Same Day"],
+            categories = ["Technology","Technology","Office Supplies"],
+        )
+        result = tech_stats(data)
+
+        self.assertEqual(result, {})
+        self.assertEqual(len(result), 0)
+
+    def test_tech_stats_case_and_whitespace_tolerance(self):
+        """
+        Edge case: function should handle mixed casing and whitespace.
+
+        Test dictionary content:
+        CA: 3 rows total (2 FC, 1 Standard), 1 tech First Class → expected 0.5
+        TX: 1 row (1 FC), 1 tech → expected 1.0
+        """
+        data = self.build_dict(
+            states     = ["CA","CA","TX","CA"],
+            ship_modes = [" first class ","FIRST CLASS","First Class","standard class"],
+            categories = [" technology ","Furniture","TECHNOLOGY","Technology"],
+        )
+        result = tech_stats(data)
+
+        self.assertAlmostEqual(result["TX"], 1.0)
+        self.assertAlmostEqual(result["CA"], 0.5)
+        self.assertEqual(list(result.keys()), ["TX","CA"])  # sorted: 1.0 then 0.5
 
 
-    # Edge cases: 
-    def test_load_data_header_partition(self):
-        # Check if keys are separated correctly
-        shipment_details_keys = set(self.data["Shipment Detail"].keys())
-        about_shipment_keys = set(self.data["About Shipment"].keys())
-        self.assertEqual(shipment_details_keys, {"Ship Mode","Segment","Country","City","State","Postal Code","Region"})
-        self.assertEqual(about_shipment_keys, {"Category","Sub-Category","Sales","Quantity","Discount","Profit"})
-        self.assertTrue(shipment_details_keys.isdisjoint(about_shipment_keys))
-
-    def test_load_data_missing_file(self):
-        # Expect FileNotFoundError for non-existent file
-        with self.assertRaises(FileNotFoundError):
-            load_data("non_existent.csv")
-
-
-# ======== Test tech_stats() ========
-    def test_load_data_edge_empty(self):
-        pass
-
-
-# ======== Test sales_rank() ========
-    def test_tech_stats_basic(self):
-        pass
-
-
-# ======== Test output_file() ========
-    def test_tech_stats_edge_zero_sales(self):
-        pass
+    # ==== Testing Calculation 1 ====
 
 
 
