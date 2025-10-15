@@ -84,12 +84,13 @@ def tech_stats(data):
     categories = data["About Shipment"]["Category"]
     total_lines = data["Item Count"]
 
+    # Step 1: Getting tech_order & total_order
     counts_dict = {}  # { state_name : [total_order_count, tech_order_count] }
 
     # Count total and tech orders per state (First Class only)
     for i in range(total_lines):
-        if ship_modes[i].strip().lower() != "first class":
-            continue  # skip if not First Class
+        if ship_modes[i].strip().lower() != "first class": # filter to only consider "first class" orders
+            continue
 
         curr_state = states[i].strip()
         curr_category = categories[i].strip().lower()
@@ -191,7 +192,6 @@ def main():
     calc1 = tech_stats(data)
     calc2 = sales_rank(data)
     output_file(calc1, calc2)
-
 
 # === Tests ===
 class TestProject1(unittest.TestCase):
@@ -386,3 +386,16 @@ if __name__ == '__main__':
 
     print("\n=== Running test cases ===")
     unittest.main(verbosity=2)
+
+
+
+
+    """
+    Challenges:
+        1) Coming up with complex enough calculation questions
+            Made sure to use three column in each calculation
+        2) Using AI in a helpful way that facilitates learning
+            made sure to read through AI's code every time and ask for clarifications
+            asked it to remind me certain syntax for quick revision
+
+    """
