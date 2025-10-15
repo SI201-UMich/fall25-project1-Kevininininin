@@ -59,10 +59,12 @@ def load_data(csv_file):
 
 def tech_stats(data):
     """
-    Question to answer: Which state has the highest percentage of Technology orders.
+    Question to answer (used 3 columns of data highlighted in <>): 
+    Which <state> has the highest percentage of <Technology orders> for <First Class> shipments.
 
     Input structure (from load_data):
       data["Shipment Detail"]["State"]       -> list[str]
+      data["Shipment Detail"]["Ship Mode"]   -> list[str]
       data["About Shipment"]["Category"]     -> list[str]
       data["Item Count"]                     -> int
 
@@ -70,20 +72,24 @@ def tech_stats(data):
       dict[str, float]  # { state_name: tech_order_pct }, sorted from highest to lowest
     """
     states = data["Shipment Detail"]["State"]
+    ship_modes = data["Shipment Detail"]["Ship Mode"]
     categories = data["About Shipment"]["Category"]
     total_lines = data["Item Count"]
 
     counts_dict = {}  # { state_name : [total_order_count, tech_order_count] }
 
-    # Count total and tech orders per state
+    # Count total and tech orders per state (First Class only)
     for i in range(total_lines):
+        if ship_modes[i].strip().lower() != "first class":
+            continue  # skip if not First Class
+
         curr_state = states[i].strip()
         curr_category = categories[i].strip().lower()
 
         if curr_state not in counts_dict:
             counts_dict[curr_state] = [0, 0]
 
-        counts_dict[curr_state][0] += 1  # total orders
+        counts_dict[curr_state][0] += 1  # total orders for that state
         if curr_category == "technology":
             counts_dict[curr_state][1] += 1  # tech orders
 
@@ -107,11 +113,56 @@ def tech_stats(data):
 
 
 def sales_rank(data):
-    pass
+    """
+    Question to answer (used 3 columns of data highlighted in <>): 
+    What is the ranking for total <Sales> (USD) by <State> for <First Class shipments>.
+
+    Input (from load_data):
+      data["Shipment Detail"]["State"]     -> list[str]
+      data["Shipment Detail"]["Ship Mode"] -> list[str]
+      data["About Shipment"]["Sales"]      -> list[str]
+      data["Item Count"]                   -> int
+
+    Returns:
+      dict[str, float]  # { state_name: total_sales_usd } in descending order
+    """
+    states = data["Shipment Detail"]["State"]
+    ship_modes = data["Shipment Detail"]["Ship Mode"]
+    sales_strs = data["About Shipment"]["Sales"]
+    total_lines = data["Item Count"]
+
+    totals = {}  # {state: total_sales}
+
+    for i in range(total_lines):
+        # filter only first-class shipments
+        if ship_modes[i].strip().lower() != "first class":
+            continue
+
+        state = states[i].strip()
+        curr_sale = float(sales_strs[i])
+
+        if state not in totals:
+            totals[state] = 0.0
+        totals[state] += curr_sale
+
+    # sort by total sales (descending)
+    sorted_items = sorted(totals.items(), key=lambda item: item[1], reverse=True)
+
+    # rebuild ordered dict
+    ranked = {}
+    for state, total in sorted_items:
+        ranked[state] = total
+
+    return ranked
+
+
 
 def output_file(calc1, calc2):
     # for key, value in calc1.items():
     #     print(f"State {key} = {value}%")
+
+    # for key, value in calc2.items():
+    #     print(f"State {key} = {round(value, 2)}$") 
     pass
 
 # === Main ===
@@ -120,6 +171,7 @@ def main():
     calc1 = tech_stats(data)
     calc2 = sales_rank(data)
     output_file(calc1, calc2)
+
 
 # === Tests ===
 class TestProject1(unittest.TestCase):
