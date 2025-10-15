@@ -12,13 +12,16 @@ def load_data(csv_file):
     """
     Load CSV file into a nested dictionary:
     {
-        "Shipment Detail": {header1: [..], header2: [..], ...},
-        "About Shipment": {header8: [..], header9: [..], ...},
+        "Shipment Detail": {header1: [...], ...},
+        "About Shipment": {header8: [...], ...},
         "Item Count": n
     }
     """
-
     return_dict = {"Shipment Detail": {}, "About Shipment": {}, "Item Count": 0}
+
+    # columns to cast
+    int_cols = {"Postal Code", "Quantity"}
+    float_cols = {"Sales", "Discount", "Profit"}
 
     infile = open(csv_file, "r")
     csv_reader = csv.reader(infile)
@@ -26,25 +29,32 @@ def load_data(csv_file):
     headers = next(csv_reader)
     total_cols = len(headers)
 
-    # split header groups for "Shipment Detail" and "About Shipment" sub-dictionaries
+    # split header groups
     shipment_headers = headers[:7]
     about_headers = headers[7:]
 
-    # initialize empty sub-dictionary lists for all keys
+    # init lists
     for h in shipment_headers:
         return_dict["Shipment Detail"][h] = []
     for h in about_headers:
         return_dict["About Shipment"][h] = []
 
-    valid_count = 0 # keep track of how many lines has valid amount of values for each column
+    valid_count = 0
 
-    # iterate over each line
     for row in csv_reader:
-        if len(row) == total_cols:  # skip malformed lines
+        if len(row) == total_cols:   # only accept complete rows
             valid_count += 1
-            for i in range(total_cols): # smart sorting that adds each value in each line to corresponding dictionary location
-                value = row[i].strip()
+            for i in range(total_cols):
+                raw = row[i].strip()
                 col_name = headers[i]
+
+                # cast types
+                if col_name in int_cols:
+                    value = int(raw)
+                elif col_name in float_cols:
+                    value = float(raw)
+                else:
+                    value = raw
 
                 if col_name in shipment_headers:
                     return_dict["Shipment Detail"][col_name].append(value)
@@ -52,9 +62,7 @@ def load_data(csv_file):
                     return_dict["About Shipment"][col_name].append(value)
 
     return_dict["Item Count"] = valid_count
-
     infile.close()
-
     return return_dict
 
 def tech_stats(data):
@@ -111,7 +119,6 @@ def tech_stats(data):
 
     return sorted_percentages
 
-
 def sales_rank(data):
     """
     Question to answer (used 3 columns of data highlighted in <>): 
@@ -120,7 +127,7 @@ def sales_rank(data):
     Input (from load_data):
       data["Shipment Detail"]["State"]     -> list[str]
       data["Shipment Detail"]["Ship Mode"] -> list[str]
-      data["About Shipment"]["Sales"]      -> list[str]
+      data["About Shipment"]["Sales"]      -> list[float]
       data["Item Count"]                   -> int
 
     Returns:
@@ -128,7 +135,7 @@ def sales_rank(data):
     """
     states = data["Shipment Detail"]["State"]
     ship_modes = data["Shipment Detail"]["Ship Mode"]
-    sales_strs = data["About Shipment"]["Sales"]
+    sales = data["About Shipment"]["Sales"]
     total_lines = data["Item Count"]
 
     totals = {}  # {state: total_sales}
@@ -139,7 +146,7 @@ def sales_rank(data):
             continue
 
         state = states[i].strip()
-        curr_sale = float(sales_strs[i])
+        curr_sale = sales[i]
 
         if state not in totals:
             totals[state] = 0.0
@@ -155,14 +162,14 @@ def sales_rank(data):
 
     return ranked
 
-
-
 def output_file(calc1, calc2):
+    
+
     # for key, value in calc1.items():
     #     print(f"State {key} = {value}%")
 
     # for key, value in calc2.items():
-    #     print(f"State {key} = {round(value, 2)}$") 
+    #     print(f"State {key} = {total:.2f}$") 
     pass
 
 # === Main ===
@@ -190,7 +197,12 @@ class TestProject1(unittest.TestCase):
         self.assertEqual(shipment_details["Ship Mode"][0], "Second Class")
         self.assertEqual(shipment_details["City"][0], "Henderson")
         self.assertEqual(about_shipment["Category"][0], "Furniture")
-        self.assertEqual(about_shipment["Sales"][0], "261.96")
+        self.assertEqual(about_shipment["Sales"][0], 261.96)
+        self.assertEqual(about_shipment["Quantity"][0], 2)         # int
+        self.assertEqual(about_shipment["Discount"][0], 0.0)       # float
+        self.assertEqual(about_shipment["Profit"][0], 41.9136)     # float
+        self.assertEqual(shipment_details["Postal Code"][0], 42420) # int
+
 
     # Edge cases: 
     def test_load_data_header_partition(self):
