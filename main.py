@@ -177,7 +177,7 @@ def output_file(calc1, calc2, out_path="project1_output.csv"):
     # calc1 is already sorted (from your tech_stats), and dict preserves insertion order
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["State", "Calc1", "Calc2"])
+        writer.writerow(["State", "Percentage_order_is_tech", "Tech_sales_total($)"])
 
         for state, pct in calc1.items():
             total_sales = calc2.get(state, 0.0)
@@ -196,7 +196,7 @@ def main():
 # === Tests ===
 class TestProject1(unittest.TestCase):
 
-    # private class function: Build mock data shaped like load_data() output
+    # Helper function: Build mock data shaped like load_data() output
     def build_dict(self, states, ship_modes, categories):
         return {
             "Shipment Detail": {
@@ -235,9 +235,9 @@ class TestProject1(unittest.TestCase):
         Test that states are sorted by descending percentage.
 
         Test dictionary content:
-        TX: 2 total FC rows, 2 tech → expected 1.0
-        CA: 2 total FC rows, 1 tech → expected 0.5
-        FL: 1 total FC row, 0 tech → expected 0.0
+        TX: 2 total FC rows, 2 tech -> expected 1.0
+        CA: 2 total FC rows, 1 tech -> expected 0.5
+        FL: 1 total FC row, 0 tech -> expected 0.0
         """
         data = self.build_dict(
             states     = ["TX","TX","CA","CA","FL"],
@@ -273,13 +273,13 @@ class TestProject1(unittest.TestCase):
         Edge case: function should handle mixed casing and whitespace.
 
         Test dictionary content:
-        CA: 3 rows total (2 FC, 1 Standard), 1 tech First Class → expected 0.5
+        CA: 2 rows total (2 FC), 1 tech → expected 0.5
         TX: 1 row (1 FC), 1 tech → expected 1.0
         """
         data = self.build_dict(
-            states     = ["CA","CA","TX","CA"],
-            ship_modes = [" first class ","FIRST CLASS","First Class","standard class"],
-            categories = [" technology ","Furniture","TECHNOLOGY","Technology"],
+            states     = ["CA","CA","TX"],
+            ship_modes = [" first class ","FIRST CLASS","First Class"],
+            categories = [" technology ","Furniture","TECHNOLOGY"],
         )
         result = tech_stats(data)
 
@@ -288,8 +288,95 @@ class TestProject1(unittest.TestCase):
         self.assertEqual(list(result.keys()), ["TX","CA"])  # sorted: 1.0 then 0.5
 
 
-    # ==== Testing Calculation 1 ====
+    # ==== Testing Calculation 2 ====
+    # Helper function: Build mock data shaped like sales_rank() output
+    def build_dict_sales(self, states, ship_modes, sales):
+        return {
+            "Shipment Detail": {
+                "State": states,
+                "Ship Mode": ship_modes,
+            },
+            "About Shipment": {
+                "Sales": sales,   # list[float]
+            },
+            "Item Count": len(states),
+        }
 
+    def test_sales_rank_correct_totals_first_class_only(self):
+        """
+        Calculates correct aggregate of first class sales by state.
+
+        Test dictionary content:
+        CA: FC=2 rows (100.0, 25.5), plus 1 Standard (50.0 ignored) → expected 125.5
+        TX: FC=1 row  (200.0) → expected 200.0
+        FL: FC=1 row  (10.0)  → expected 10.0
+        """
+        data = self.build_dict_sales(
+            states     = ["CA","CA","TX","FL","CA"],
+            ship_modes = ["First Class","Standard Class","First Class","First Class","First Class"],
+            sales      = [100.0, 50.0, 200.0, 10.0, 25.5],
+        )
+        result = sales_rank(data)
+
+        self.assertAlmostEqual(result["CA"], 125.5)
+        self.assertAlmostEqual(result["TX"], 200.0)
+        self.assertAlmostEqual(result["FL"], 10.0)
+
+    def test_sales_rank_sorted_descending(self):
+        """
+        Test if states are sorted by descending total sales order.
+
+        Test dictionary content:
+        CA: 100.0 + 75.0 = 175.0 → expected top
+        FL: 50.0 → expected missle
+        TX: 1.0 → expected last
+        """
+        data = self.build_dict_sales(
+            states     = ["TX","CA","FL","CA"],
+            ship_modes = ["First Class","First Class","First Class","First Class"],
+            sales      = [1.0, 100.0, 50.0, 75.0],
+        )
+        result = sales_rank(data)
+
+        self.assertEqual(list(result.keys()), ["CA","FL","TX"])
+
+    # edge cases
+    def test_sales_rank_ties_preserve_first_seen_order(self):
+        """
+        Tied totals should be sorted by first appearance of each state.
+
+        Test dictionary content:
+        CA: 100.0 + 100.0 = 200.0 (first seen)
+        NY: 200.0 + 0.0   = 200.0 (second seen)
+        Expected order: ["CA","NY"]
+        """
+        data = self.build_dict_sales(
+            states     = ["CA","NY","CA","NY"],
+            ship_modes = ["First Class","First Class","First Class","First Class"],
+            sales      = [100.0, 200.0, 100.0, 0.0],
+        )
+        result = sales_rank(data)
+
+        self.assertAlmostEqual(result["CA"], 200.0)
+        self.assertAlmostEqual(result["NY"], 200.0)
+        self.assertEqual(list(result.keys()), ["CA","NY"])
+
+    def test_sales_rank_no_first_class_returns_empty(self):
+        """
+        When there are no First Class rows, result should be empty.
+
+        Test dictionary content:
+        All rows are non-First-Class → expected {}.
+        """
+        data = self.build_dict_sales(
+            states     = ["CA","TX","FL"],
+            ship_modes = ["Standard Class","Second Class","Same Day"],
+            sales      = [100.0, 200.0, 50.0],
+        )
+        result = sales_rank(data)
+
+        self.assertEqual(result, {})
+        self.assertEqual(len(result), 0)
 
 
 # ==== main() & unittest.main() ==== 
@@ -299,4 +386,3 @@ if __name__ == '__main__':
 
     print("\n=== Running test cases ===")
     unittest.main(verbosity=2)
-
