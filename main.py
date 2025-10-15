@@ -58,12 +58,59 @@ def load_data(csv_file):
     return return_dict
 
 def tech_stats(data):
-    pass
+    """
+    Compute the percentage of technology orders for each city.
+
+    Input structure (from load_data):
+      data["Shipment Detail"]["City"]        -> list[str]
+      data["About Shipment"]["Category"]     -> list[str]
+      data["Item Count"]                     -> int
+
+    Returns:
+      dict[str, float]  # { city_name: tech_order_pct }
+    """
+    cities = data["Shipment Detail"]["City"]
+    categories = data["About Shipment"]["Category"]
+    total_lines = data["Item Count"]
+
+    counts_dict = {} # nested dict of {city_name : [total_order_count, is_tech_count]}
+
+    for i in range(total_lines):
+        curr_city = cities[i].strip()
+        curr_category = categories[i].strip().lower()
+
+        if curr_city not in counts_dict: # add new city nested dict to counts_dict
+            counts_dict[curr_city] = [0, 0]
+
+        counts_dict[curr_city][0] += 1 # total_order_count += 1
+
+        if curr_category == "technology": # if is tech order: is_tech_count += 1
+            counts_dict[curr_city][1] += 1
+
+    percentages = {} # dict of {city_name : percentage_is_tech_orders}
+    for curr_city, (total, tech) in counts_dict.items():
+        if total > 0:
+            percentages[curr_city] = tech / total
+        else: # account for 0/0 edge case
+            percentages[curr_city] = 0.0
+
+    # New list of tuples of sort values from highest to lowest percentages
+    sorted_items = sorted(percentages.items(), key=lambda item: item[1], reverse=True)
+
+    # Step 4: rebuild dictionary in sorted order
+    sorted_percentages = {}
+    for city, pct in sorted_items:
+        sorted_percentages[city] = pct
+
+    return sorted_percentages
+
 
 def sales_rank(data):
     pass
 
 def output_file(calc1, calc2):
+    # for key, value in calc1.items():
+    #     print(f"City {key} = {value}%")
     pass
 
 # === Main ===
