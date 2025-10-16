@@ -1,8 +1,12 @@
 # Name: Jinghan Wu
 # UMID: 77132944
 # E-mail: kevinwuu@umich.edu
-# Collaborators: I'm working by myself. I wrote everything.
-# AI disclosure:
+# Collaborators: I'm working by myself.
+# AI disclosure: As instructed, I first made function decomposition without AI assistance, with each function,
+                #I also designed step-by-step breakdowns that the program should calculate.
+                #I then fed my plan to ChatGPT where it outputed initial codes. From there I made lots of
+                #edits, asked for clarifications, carefully read through each line to make sure I understood everything
+                #and that everything looked as intended. 
 
 import csv
 import unittest
@@ -84,7 +88,7 @@ def tech_stats(data):
     categories = data["About Shipment"]["Category"]
     total_lines = data["Item Count"]
 
-    # Step 1: Getting tech_order & total_order
+    # Getting # counts for tech_order & total_order
     counts_dict = {}  # { state_name : [total_order_count, tech_order_count] }
 
     # Count total and tech orders per state (First Class only)
@@ -111,6 +115,7 @@ def tech_stats(data):
             percentages[curr_state] = 0.0
 
     # Sort by percentage (highest first)
+    # percentaged.items() = [("CA", 0.5), ("FL", 0.8), ...]
     sorted_items = sorted(percentages.items(), key=lambda item: item[1], reverse=True)
 
     # Rebuild sorted dictionary
@@ -123,67 +128,81 @@ def tech_stats(data):
 def sales_rank(data):
     """
     Question to answer (used 3 columns of data highlighted in <>): 
-    What is the ranking for total <Sales> (USD) by <State> for <First Class shipments>.
+    What is the ranking for total <Sales> (USD) by <City> for <First Class shipments>.
 
     Input (from load_data):
-      data["Shipment Detail"]["State"]     -> list[str]
+      data["Shipment Detail"]["City"]      -> list[str]
       data["Shipment Detail"]["Ship Mode"] -> list[str]
       data["About Shipment"]["Sales"]      -> list[float]
       data["Item Count"]                   -> int
 
     Returns:
-      dict[str, float]  # { state_name: total_sales_usd } in descending order
+      dict[str, float]  # { city_name: total_sales_usd } in descending order
     """
-    states = data["Shipment Detail"]["State"]
+    cities = data["Shipment Detail"]["City"]
     ship_modes = data["Shipment Detail"]["Ship Mode"]
     sales = data["About Shipment"]["Sales"]
     total_lines = data["Item Count"]
 
-    totals = {}  # {state: total_sales}
+    totals = {}  # {city: total_sales}
 
     for i in range(total_lines):
-        # filter only first-class shipments
+        # Filter to include only "First Class" shipments
         if ship_modes[i].strip().lower() != "first class":
             continue
 
-        state = states[i].strip()
-        curr_sale = sales[i]
+        curr_city = cities[i].strip()
+        curr_sale = sales[i]  # already float from load_data()
 
-        if state not in totals:
-            totals[state] = 0.0
-        totals[state] += curr_sale
+        # Add city to dictionary if new, else aggregate
+        if curr_city not in totals:
+            totals[curr_city] = 0.0
+        totals[curr_city] += curr_sale
 
-    # sort by total sales (descending)
+    # Sort by total sales (descending)
     sorted_items = sorted(totals.items(), key=lambda item: item[1], reverse=True)
 
-    # rebuild ordered dict
+    # Rebuild ordered dict
     ranked = {}
-    for state, total in sorted_items:
-        ranked[state] = total
+    for city, total in sorted_items:
+        ranked[city] = total
 
     return ranked
 
-def output_file(calc1, calc2, out_path="project1_output.csv"):
+def output_file(calc1, calc2, out_path="project1_output.txt"):
     """
-    Write results to a CSV with columns:
-      State, Calc1, Calc2
+    Write analysis results to a plain text file with the following structure:
 
-    Where:
-      - calc1: dict[state -> percentage of Technology orders for First Class] (float)
-      - calc2: dict[state -> total First Class Sales USD] (float)
+    Proportion of tech order by state (ranked descending):
+    <state>: <percentage>%
+
+    Total tech sales by city (ranked descending):
+    <city>: $<total_sales>
+
+    Parameters:
+      calc1: dict[state -> percentage of Technology orders for First Class]
+      calc2: dict[city -> total First Class Sales USD]
+      out_path: str (default = "project1_output.txt")
 
     Returns:
-      str  # the output path
+      str  # path of the output file
     """
-    # calc1 is already sorted (from your tech_stats), and dict preserves insertion order
-    with open(out_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["State", "Percentage_order_is_tech", "Tech_sales_total($)"])
 
+    with open(out_path, "w") as f:
+        # Section 1: Tech order proportion by state
+        f.write("Proportion of tech order by state (ranked descending):\n")
         for state, pct in calc1.items():
-            total_sales = calc2.get(state, 0.0)
-            # No rounding per your earlier preference; write raw floats
-            writer.writerow([state, round(pct,2), round(total_sales,2)])
+            f.write(f"{state}: {round(pct * 100, 2)}%\n")  # convert ratio → %
+        
+        f.write("\n")  # spacing between sections
+
+        # Section 2: Total tech sales by city
+        f.write("Total tech sales by city (ranked descending):\n")
+        for city, total_sales in calc2.items():
+            f.write(f"{city}: ${round(total_sales, 2)}\n")
+
+    return out_path
+
 
 
 # === Main ===
@@ -290,76 +309,77 @@ class TestProject1(unittest.TestCase):
 
     # ==== Testing Calculation 2 ====
     # Helper function: Build mock data shaped like sales_rank() output
-    def build_dict_sales(self, states, ship_modes, sales):
+    def build_dict_sales(self, cities, ship_modes, sales):
         return {
             "Shipment Detail": {
-                "State": states,
+                "City": cities,
                 "Ship Mode": ship_modes,
             },
             "About Shipment": {
-                "Sales": sales,   # list[float]
+                "Sales": sales,  # list[float]
             },
-            "Item Count": len(states),
+            "Item Count": len(cities),
         }
+
 
     def test_sales_rank_correct_totals_first_class_only(self):
         """
-        Calculates correct aggregate of first class sales by state.
+        Calculates correct aggregate of First Class sales by city.
 
         Test dictionary content:
-        CA: FC=2 rows (100.0, 25.5), plus 1 Standard (50.0 ignored) → expected 125.5
-        TX: FC=1 row  (200.0) → expected 200.0
-        FL: FC=1 row  (10.0)  → expected 10.0
+        Los Angeles: FC rows 100.0 + 25.5; Standard 50.0 (ignored) → expected 125.5
+        Dallas:     FC row  200.0 → expected 200.0
+        Miami:      FC row   10.0 → expected 10.0
         """
         data = self.build_dict_sales(
-            states     = ["CA","CA","TX","FL","CA"],
+            cities     = ["Los Angeles","Los Angeles","Dallas","Miami","Los Angeles"],
             ship_modes = ["First Class","Standard Class","First Class","First Class","First Class"],
             sales      = [100.0, 50.0, 200.0, 10.0, 25.5],
         )
         result = sales_rank(data)
 
-        self.assertAlmostEqual(result["CA"], 125.5)
-        self.assertAlmostEqual(result["TX"], 200.0)
-        self.assertAlmostEqual(result["FL"], 10.0)
+        self.assertAlmostEqual(result["Los Angeles"], 125.5)
+        self.assertAlmostEqual(result["Dallas"], 200.0)
+        self.assertAlmostEqual(result["Miami"], 10.0)
 
     def test_sales_rank_sorted_descending(self):
         """
-        Test if states are sorted by descending total sales order.
+        Test if cities are sorted by descending total sales.
 
         Test dictionary content:
-        CA: 100.0 + 75.0 = 175.0 → expected top
-        FL: 50.0 → expected missle
-        TX: 1.0 → expected last
+        Los Angeles: 100.0 + 75.0 = 175.0 → expected top
+        Miami:       50.0         = 50.0  → expected middle
+        Dallas:      1.0          = 1.0   → expected last
         """
         data = self.build_dict_sales(
-            states     = ["TX","CA","FL","CA"],
+            cities     = ["Dallas","Los Angeles","Miami","Los Angeles"],
             ship_modes = ["First Class","First Class","First Class","First Class"],
             sales      = [1.0, 100.0, 50.0, 75.0],
         )
         result = sales_rank(data)
 
-        self.assertEqual(list(result.keys()), ["CA","FL","TX"])
+        self.assertEqual(list(result.keys()), ["Los Angeles","Miami","Dallas"])
 
-    # edge cases
+    # Edge case
     def test_sales_rank_ties_preserve_first_seen_order(self):
         """
-        Tied totals should be sorted by first appearance of each state.
+        Tied totals should preserve first-seen order from the sorted stable algorithm.
 
         Test dictionary content:
-        CA: 100.0 + 100.0 = 200.0 (first seen)
-        NY: 200.0 + 0.0   = 200.0 (second seen)
-        Expected order: ["CA","NY"]
+        San Jose: 100.0 + 100.0 = 200.0 (first seen)
+        New York: 200.0 + 0.0   = 200.0 (second seen)
+        Expected order: ["San Jose","New York"]
         """
         data = self.build_dict_sales(
-            states     = ["CA","NY","CA","NY"],
+            cities     = ["San Jose","New York","San Jose","New York"],
             ship_modes = ["First Class","First Class","First Class","First Class"],
             sales      = [100.0, 200.0, 100.0, 0.0],
         )
         result = sales_rank(data)
 
-        self.assertAlmostEqual(result["CA"], 200.0)
-        self.assertAlmostEqual(result["NY"], 200.0)
-        self.assertEqual(list(result.keys()), ["CA","NY"])
+        self.assertAlmostEqual(result["San Jose"], 200.0)
+        self.assertAlmostEqual(result["New York"], 200.0)
+        self.assertEqual(list(result.keys()), ["San Jose","New York"])
 
     def test_sales_rank_no_first_class_returns_empty(self):
         """
@@ -369,7 +389,7 @@ class TestProject1(unittest.TestCase):
         All rows are non-First-Class → expected {}.
         """
         data = self.build_dict_sales(
-            states     = ["CA","TX","FL"],
+            cities     = ["Los Angeles","Dallas","Miami"],
             ship_modes = ["Standard Class","Second Class","Same Day"],
             sales      = [100.0, 200.0, 50.0],
         )
@@ -377,7 +397,6 @@ class TestProject1(unittest.TestCase):
 
         self.assertEqual(result, {})
         self.assertEqual(len(result), 0)
-
 
 # ==== main() & unittest.main() ==== 
 if __name__ == '__main__':
@@ -387,15 +406,3 @@ if __name__ == '__main__':
     print("\n=== Running test cases ===")
     unittest.main(verbosity=2)
 
-
-
-
-    """
-    Challenges:
-        1) Coming up with complex enough calculation questions
-            Made sure to use three column in each calculation
-        2) Using AI in a helpful way that facilitates learning
-            made sure to read through AI's code every time and ask for clarifications
-            asked it to remind me certain syntax for quick revision
-
-    """
